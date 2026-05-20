@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import logging
 import urllib.error
 import urllib.request
+from typing import Optional
 
 
 class ShellyController:
@@ -19,7 +22,9 @@ class ShellyController:
         self.timeout = getattr(args, "shelly_timeout", 3.0)
 
         if self.enabled and not self.device_ip:
-            logging.warning("Shelly habilitado pero sin IP configurada. Deshabilitando.")
+            logging.warning(
+                "Shelly habilitado pero sin IP configurada. Deshabilitando."
+            )
             self.enabled = False
 
         if self.enabled:
@@ -27,12 +32,14 @@ class ShellyController:
                 f"ShellyController: Gen{self.generation} en {self.device_ip}, relay {self.relay_id}"
             )
         else:
-            logging.info("ShellyController: deshabilitado (shelly_enabled = false en config.ini)")
+            logging.info(
+                "ShellyController: deshabilitado (shelly_enabled = false en config.ini)"
+            )
 
     def available(self) -> bool:
         return self.enabled and bool(self.device_ip)
 
-    def _request(self, url: str, data: bytes | None = None) -> dict | None:
+    def _request(self, url: str, data: Optional[bytes] = None) -> Optional[dict]:
         headers = {"Content-Type": "application/json"} if data else {}
         req = urllib.request.Request(url, data=data, headers=headers)
         try:
@@ -91,14 +98,12 @@ class ShellyController:
             return True
         return False
 
-    def get_status(self) -> bool | None:
+    def get_status(self) -> Optional[bool]:
         """Returns True if on, False if off, None if unreachable."""
         if not self.available():
             return None
         if self.generation == 1:
-            result = self._request(
-                f"http://{self.device_ip}/relay/{self.relay_id}"
-            )
+            result = self._request(f"http://{self.device_ip}/relay/{self.relay_id}")
             if result is not None:
                 return result.get("ison", False)
         else:
