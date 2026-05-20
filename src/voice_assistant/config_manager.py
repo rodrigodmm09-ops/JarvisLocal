@@ -205,6 +205,7 @@ def load_config_and_args() -> Tuple[
     config_perf = config["Performance"] if "Performance" in config else {}
     config_groq = config["Groq"] if "Groq" in config else {}
     config_shelly = config["Shelly"] if "Shelly" in config else {}
+    config_location = config["Location"] if "Location" in config else {}
 
     def get_config_val(
         section: configparser.SectionProxy, key: str, default: Any, type_converter: type
@@ -402,6 +403,18 @@ def load_config_and_args() -> Tuple[
         help="Groq model name (e.g., 'llama-3.3-70b-versatile').",
     )
 
+    location_group = parser.add_argument_group("Location")
+    location_group.add_argument(
+        "--location-latitude",
+        type=float,
+        help="Latitude for weather queries (Open-Meteo).",
+    )
+    location_group.add_argument(
+        "--location-longitude",
+        type=float,
+        help="Longitude for weather queries (Open-Meteo).",
+    )
+
     shelly_group = parser.add_argument_group("Shelly")
     shelly_group.add_argument(
         "--shelly-enabled",
@@ -560,6 +573,18 @@ def load_config_and_args() -> Tuple[
         ),
         # Resolved at runtime in assistant.py; initialised here so the attribute always exists
         effective_llm_backend=DEFAULT_SETTINGS["llm_backend"],
+        location_latitude=get_config_val(
+            config_location,
+            "latitude",
+            DEFAULT_SETTINGS["location_latitude"],
+            float,
+        ),
+        location_longitude=get_config_val(
+            config_location,
+            "longitude",
+            DEFAULT_SETTINGS["location_longitude"],
+            float,
+        ),
         shelly_enabled=get_config_val(
             config_shelly, "enabled", DEFAULT_SETTINGS["shelly_enabled"], bool
         ),

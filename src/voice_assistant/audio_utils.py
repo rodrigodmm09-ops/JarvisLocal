@@ -68,6 +68,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "shelly_relay_id": 0,
     "shelly_generation": 2,
     "shelly_timeout": 3.0,
+    # Location for weather (Open-Meteo, no API key needed)
+    "location_latitude": 40.4168,  # Madrid por defecto
+    "location_longitude": -3.7038,
 }
 
 

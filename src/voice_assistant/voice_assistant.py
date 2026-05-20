@@ -16,6 +16,8 @@ from .llm_handler import LLMHandler
 from .groq_handler import GroqHandler
 from .music_player import MusicPlayer
 from .shelly_controller import ShellyController
+from .weather import WeatherClient
+from . import timer_store
 from .audio_utils import SENTENCE_END_PUNCTUATION, monitor_memory
 
 STARTUP_GREETINGS = [
@@ -102,6 +104,19 @@ LIGHT_STATUS_PATTERNS = [
     r"^(?:luz|luces)\s+(?:estado|status)\??$",
 ]
 
+# --- Weather patterns --------------------------------------------------------
+WEATHER_PATTERNS = [
+    r"\bqu[eé]\s+tiempo\b",
+    r"\bc[oó]mo\s+est[aá]\s+el\s+tiempo\b",
+    r"\bc[oó]mo\s+est[aá]\s+(?:la\s+)?temperatura\b",
+    r"\bcu[aá]ntos\s+grados\b",
+    r"\bqu[eé]\s+temperatura\b",
+    r"\bva\s+a\s+llover\b",
+    r"\best[aá]\s+lloviendo\b",
+    r"^(?:el\s+)?tiempo\.?\??$",
+    r"^temperatura\.?\??$",
+]
+
 # --- Voice triggers ----------------------------------------------------------
 # Hard-coded "magic phrases" that bypass the LLM and play a specific song.
 # Detection is substring-based on an accent-folded transcript.
@@ -172,6 +187,9 @@ class VoiceAssistant:
         self.tts = Synthesizer(args, self.interrupt_event)
         self.music = MusicPlayer()
         self.shelly = ShellyController(args)
+        self.weather = WeatherClient(args)
+
+        self._restore_timers()
 
         # Select LLM handler based on the resolved backend
         backend = getattr(args, "effective_llm_backend", "ollama")
@@ -328,6 +346,7 @@ class VoiceAssistant:
                     for timer in pending:
                         timer["event"].set()
                     self.active_timers.clear()
+                    timer_store.clear()
 
                 if count == 1:
                     msg = "Temporizador cancelado. Como si nunca hubiera existido."
@@ -367,6 +386,7 @@ class VoiceAssistant:
                 self.tts.queue.join()
                 logging.info(f"[Timer] Iniciado: {seconds}s")
 
+                fire_at = time.time() + seconds
                 cancel_event = threading.Event()
 
                 def _fire(secs, lbl, tts, ev):
@@ -383,6 +403,7 @@ class VoiceAssistant:
                         self.active_timers[:] = [
                             x for x in self.active_timers if x["event"] is not ev
                         ]
+                        timer_store.save(self.active_timers)
 
                 t_thread = threading.Thread(
                     target=_fire,
@@ -395,8 +416,10 @@ class VoiceAssistant:
                             "event": cancel_event,
                             "label": label,
                             "thread": t_thread,
+                            "fire_at": fire_at,
                         }
                     )
+                    timer_store.save(self.active_timers)
                 t_thread.start()
                 return True
 
@@ -545,6 +568,68 @@ class VoiceAssistant:
                 self.tts.queue.join()
                 return True
 
+        return False
+
+    def _restore_timers(self) -> None:
+        """Recreate timer threads for timers that survived a reboot."""
+        pending = timer_store.load()
+        if not pending:
+            return
+        for entry in pending:
+            remaining = entry["remaining_seconds"]
+            label = entry["label"]
+            fire_at = entry["fire_at"]
+            cancel_event = threading.Event()
+
+            def _fire_r(secs, lbl, tts, ev):
+                was_cancelled = ev.wait(timeout=secs)
+                if was_cancelled:
+                    return
+                tts.speak(f"Han pasado {lbl}. Ya puede dejar de ignorarme.")
+                tts.queue.join()
+                with self.timers_lock:
+                    self.active_timers[:] = [
+                        x for x in self.active_timers if x["event"] is not ev
+                    ]
+                    timer_store.save(self.active_timers)
+
+            t_thread = threading.Thread(
+                target=_fire_r,
+                args=(remaining, label, self.tts, cancel_event),
+                daemon=True,
+            )
+            with self.timers_lock:
+                self.active_timers.append(
+                    {
+                        "event": cancel_event,
+                        "label": label,
+                        "thread": t_thread,
+                        "fire_at": fire_at,
+                    }
+                )
+            t_thread.start()
+            status = (
+                "ya expirado, disparando en 5s"
+                if entry.get("already_expired")
+                else f"{remaining:.0f}s restantes"
+            )
+            logging.info(f"[Timer] Restaurado '{label}' ({status})")
+
+    def _handle_weather_command(self, text: str) -> bool:
+        """Fetches and speaks current weather. Returns True if handled."""
+        t = text.lower().strip().rstrip(".?!,¿¡")
+        for pat in WEATHER_PATTERNS:
+            if re.search(pat, t, flags=re.IGNORECASE):
+                logging.info("[Weather] Consultando el tiempo...")
+                data = self.weather.get_current()
+                if data is None:
+                    self.tts.speak(
+                        "No he podido obtener el tiempo. Sin conexión o Open-Meteo caído."
+                    )
+                else:
+                    self.tts.speak(self.weather.format_response(data))
+                self.tts.queue.join()
+                return True
         return False
 
     def _process_plugins(self, text: str) -> str:
@@ -699,6 +784,11 @@ class VoiceAssistant:
 
             # Check for light control commands BEFORE sending to LLM
             if self._handle_light_command(user_text):
+                self.audio.start()
+                return True
+
+            # Check for weather queries BEFORE sending to LLM
+            if self._handle_weather_command(user_text):
                 self.audio.start()
                 return True
 
