@@ -15,6 +15,7 @@ from .synthesizer import Synthesizer
 from .llm_handler import LLMHandler
 from .groq_handler import GroqHandler
 from .music_player import MusicPlayer
+from .shelly_controller import ShellyController
 from .audio_utils import SENTENCE_END_PUNCTUATION, monitor_memory
 
 STARTUP_GREETINGS = [
@@ -79,6 +80,26 @@ MUSIC_PLAY_PATTERNS = [
 MUSIC_STOP_PATTERNS = [
     r"\b(?:para|pausa|deten|detén|detente|c[aá]llate|silencio|stop|apaga|quita|cierra|corta)\s+(?:la\s+|el\s+)?(?:m[uú]sica|canci[oó]n|tema|reproducci[oó]n)\b",
     r"^(?:para|pausa|stop|c[aá]llate|silencio|basta)\.?$",
+]
+
+# --- Light control patterns --------------------------------------------------
+LIGHT_ON_PATTERNS = [
+    r"\b(?:enciende|encender|prende|prender|pon|conecta|activa)\b.{0,20}\bluc(?:es|e)?\b",
+    r"\bluc(?:es|e)?\b.{0,15}\b(?:on|encendida|encendidas|encendido)\b",
+    r"^(?:luz|luces)\s+on\.?$",
+]
+LIGHT_OFF_PATTERNS = [
+    r"\b(?:apaga|apagar|quita|quitar|desconecta|desconectar|corta|cortar)\b.{0,20}\bluc(?:es|e)?\b",
+    r"\bluc(?:es|e)?\b.{0,15}\b(?:off|apagada|apagadas|apagado)\b",
+    r"^(?:luz|luces)\s+off\.?$",
+]
+LIGHT_TOGGLE_PATTERNS = [
+    r"\b(?:cambia|toggle|cambia)\b.{0,15}\bluc(?:es|e)?\b",
+]
+LIGHT_STATUS_PATTERNS = [
+    r"\b(?:estado|c[oó]mo\s+est[aá]|est[aá])\b.{0,20}\bluc(?:es|e)?\b",
+    r"\bluc(?:es|e)?\b.{0,15}\b(?:encendida|apagada|estado)\b",
+    r"^(?:luz|luces)\s+(?:estado|status)\??$",
 ]
 
 # --- Voice triggers ----------------------------------------------------------
@@ -150,6 +171,7 @@ class VoiceAssistant:
         self.transcriber = Transcriber(args)
         self.tts = Synthesizer(args, self.interrupt_event)
         self.music = MusicPlayer()
+        self.shelly = ShellyController(args)
 
         # Select LLM handler based on the resolved backend
         backend = getattr(args, "effective_llm_backend", "ollama")
@@ -472,6 +494,59 @@ class VoiceAssistant:
 
         return False
 
+    def _handle_light_command(self, text: str) -> bool:
+        """Detects and executes light control commands via Shelly. Returns True if handled."""
+        if not self.shelly.available():
+            return False
+
+        t = text.lower().strip().rstrip(".?!,¿¡")
+        logging.info(f"[LIGHT] Evaluando: '{t}'")
+
+        for pat in LIGHT_ON_PATTERNS:
+            if re.search(pat, t, flags=re.IGNORECASE):
+                logging.info("[LIGHT] Comando encender detectado")
+                if self.shelly.turn_on():
+                    self.tts.speak("Luz encendida.")
+                else:
+                    self.tts.speak("No he podido contactar con el Shelly.")
+                self.tts.queue.join()
+                return True
+
+        for pat in LIGHT_OFF_PATTERNS:
+            if re.search(pat, t, flags=re.IGNORECASE):
+                logging.info("[LIGHT] Comando apagar detectado")
+                if self.shelly.turn_off():
+                    self.tts.speak("Luz apagada.")
+                else:
+                    self.tts.speak("No he podido contactar con el Shelly.")
+                self.tts.queue.join()
+                return True
+
+        for pat in LIGHT_TOGGLE_PATTERNS:
+            if re.search(pat, t, flags=re.IGNORECASE):
+                logging.info("[LIGHT] Comando toggle detectado")
+                if self.shelly.toggle():
+                    self.tts.speak("Hecho.")
+                else:
+                    self.tts.speak("No he podido contactar con el Shelly.")
+                self.tts.queue.join()
+                return True
+
+        for pat in LIGHT_STATUS_PATTERNS:
+            if re.search(pat, t, flags=re.IGNORECASE):
+                logging.info("[LIGHT] Comando estado detectado")
+                status = self.shelly.get_status()
+                if status is None:
+                    self.tts.speak("No he podido contactar con el Shelly.")
+                elif status:
+                    self.tts.speak("La luz está encendida.")
+                else:
+                    self.tts.speak("La luz está apagada.")
+                self.tts.queue.join()
+                return True
+
+        return False
+
     def _process_plugins(self, text: str) -> str:
         """Processes simple plugins like [current time]."""
         if "[current time]" in text.lower():
@@ -619,6 +694,11 @@ class VoiceAssistant:
 
             # Check for music commands BEFORE sending to LLM
             if self._handle_music_command(user_text):
+                self.audio.start()
+                return True
+
+            # Check for light control commands BEFORE sending to LLM
+            if self._handle_light_command(user_text):
                 self.audio.start()
                 return True
 

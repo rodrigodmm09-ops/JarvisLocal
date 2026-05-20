@@ -44,8 +44,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         'Frases frecuentes del usuario: "El comandante ya esta aqui". '
         '"El comandante esta aqui". "Pon un temporizador de cinco minutos". '
         '"Cancela el temporizador". "Pon musica de". '
-        "Vocabulario habitual: comandante, comandante, comandante, "
-        "temporizador, musica, reproduce, cancela, Erika, marcha alemana, "
+        '"Enciende la luz". "Apaga la luz". "Estado de la luz". '
+        "Vocabulario habitual: comandante, temporizador, musica, reproduce, "
+        "cancela, enciende, apaga, luz, luces, Erika, marcha alemana, "
         "Atletico de Madrid, Real Madrid, Barca, Rodrigo, Alberto, Victor, "
         "Bragado, Topo, El Local."
     ),
@@ -61,6 +62,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "llm_backend": "auto",
     "groq_api_key": "",
     "groq_model": "llama-3.3-70b-versatile",
+    # Shelly relay control
+    "shelly_enabled": False,
+    "shelly_device_ip": "",
+    "shelly_relay_id": 0,
+    "shelly_generation": 2,
+    "shelly_timeout": 3.0,
 }
 
 

@@ -204,6 +204,7 @@ def load_config_and_args() -> Tuple[
     config_func = config["Functionality"] if "Functionality" in config else {}
     config_perf = config["Performance"] if "Performance" in config else {}
     config_groq = config["Groq"] if "Groq" in config else {}
+    config_shelly = config["Shelly"] if "Shelly" in config else {}
 
     def get_config_val(
         section: configparser.SectionProxy, key: str, default: Any, type_converter: type
@@ -401,6 +402,34 @@ def load_config_and_args() -> Tuple[
         help="Groq model name (e.g., 'llama-3.3-70b-versatile').",
     )
 
+    shelly_group = parser.add_argument_group("Shelly")
+    shelly_group.add_argument(
+        "--shelly-enabled",
+        action="store_true",
+        help="Enable Shelly relay light control.",
+    )
+    shelly_group.add_argument(
+        "--shelly-device-ip",
+        type=str,
+        help="Local IP address of the Shelly device.",
+    )
+    shelly_group.add_argument(
+        "--shelly-relay-id",
+        type=int,
+        help="Relay channel ID (0 for first relay).",
+    )
+    shelly_group.add_argument(
+        "--shelly-generation",
+        type=int,
+        choices=[1, 2],
+        help="Shelly API generation: 1 (classic) or 2 (Plus/Mini Gen3).",
+    )
+    shelly_group.add_argument(
+        "--shelly-timeout",
+        type=float,
+        help="HTTP timeout in seconds for Shelly requests.",
+    )
+
     parser.set_defaults(
         ollama_model=get_config_val(
             config_models, "ollama_model", DEFAULT_SETTINGS["ollama_model"], str
@@ -531,6 +560,21 @@ def load_config_and_args() -> Tuple[
         ),
         # Resolved at runtime in assistant.py; initialised here so the attribute always exists
         effective_llm_backend=DEFAULT_SETTINGS["llm_backend"],
+        shelly_enabled=get_config_val(
+            config_shelly, "enabled", DEFAULT_SETTINGS["shelly_enabled"], bool
+        ),
+        shelly_device_ip=get_config_val(
+            config_shelly, "device_ip", DEFAULT_SETTINGS["shelly_device_ip"], str
+        ),
+        shelly_relay_id=get_config_val(
+            config_shelly, "relay_id", DEFAULT_SETTINGS["shelly_relay_id"], int
+        ),
+        shelly_generation=get_config_val(
+            config_shelly, "generation", DEFAULT_SETTINGS["shelly_generation"], int
+        ),
+        shelly_timeout=get_config_val(
+            config_shelly, "timeout", DEFAULT_SETTINGS["shelly_timeout"], float
+        ),
     )
 
     args = parser.parse_args()
