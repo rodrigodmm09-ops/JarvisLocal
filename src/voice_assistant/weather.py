@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
+from .location import get_location
+
 # WMO weather interpretation codes → description in Spanish
 _WMO = {
     0: "cielo despejado",
@@ -39,14 +41,16 @@ class WeatherClient:
     """Fetches current weather from Open-Meteo (free, no API key)."""
 
     def __init__(self, args):
-        self.latitude = getattr(args, "location_latitude", 40.4168)
-        self.longitude = getattr(args, "location_longitude", -3.7038)
+        self._lat_fallback = getattr(args, "location_latitude", 40.4168)
+        self._lon_fallback = getattr(args, "location_longitude", -3.7038)
+        self._auto = getattr(args, "location_auto", True)
         self.timeout = 5.0
 
     def get_current(self) -> Optional[dict]:
+        lat, lon = get_location(self._lat_fallback, self._lon_fallback, self._auto)
         url = (
             "https://api.open-meteo.com/v1/forecast"
-            f"?latitude={self.latitude}&longitude={self.longitude}"
+            f"?latitude={lat}&longitude={lon}"
             "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m"
             "&timezone=auto"
         )

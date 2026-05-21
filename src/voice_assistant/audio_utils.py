@@ -69,6 +69,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "shelly_generation": 2,
     "shelly_timeout": 3.0,
     # Location for weather (Open-Meteo, no API key needed)
+    "location_auto": True,
     "location_latitude": 39.9367,
     "location_longitude": -3.9192,
 }

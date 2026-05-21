@@ -405,14 +405,19 @@ def load_config_and_args() -> Tuple[
 
     location_group = parser.add_argument_group("Location")
     location_group.add_argument(
+        "--location-auto",
+        action=argparse.BooleanOptionalAction,
+        help="Auto-detect location via IP geolocation (default: true).",
+    )
+    location_group.add_argument(
         "--location-latitude",
         type=float,
-        help="Latitude for weather queries (Open-Meteo).",
+        help="Fallback latitude when auto-detection is disabled or fails.",
     )
     location_group.add_argument(
         "--location-longitude",
         type=float,
-        help="Longitude for weather queries (Open-Meteo).",
+        help="Fallback longitude when auto-detection is disabled or fails.",
     )
 
     shelly_group = parser.add_argument_group("Shelly")
@@ -573,6 +578,12 @@ def load_config_and_args() -> Tuple[
         ),
         # Resolved at runtime in assistant.py; initialised here so the attribute always exists
         effective_llm_backend=DEFAULT_SETTINGS["llm_backend"],
+        location_auto=get_config_val(
+            config_location,
+            "auto",
+            DEFAULT_SETTINGS["location_auto"],
+            bool,
+        ),
         location_latitude=get_config_val(
             config_location,
             "latitude",
